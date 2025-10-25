@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Executive Race - Maturity Challenge</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            overflow: hidden;
+        }
+
+        #gameContainer {
+            position: relative;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            background: #f0f0f0;
+        }
+
+        #startScreen, #gameOverScreen, #winScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            text-align: center;
+            padding: 20px;
+        }
+
+        h1 {
+            font-size: 48px;
+            margin-bottom: 20px;
+            color: #FFD700;
+        }
+
+        h2 {
+            font-size: 32px;
+            margin-bottom: 20px;
+        }
+
+        p {
+            font-size: 18px;
+            margin-bottom: 10px;
+            max-width: 600px;
+        }
+
+        button {
+            font-size: 24px;
+            padding: 15px 40px;
+            margin-top: 20px;
+            background: #FFD700;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: transform 0.2s;
+        }
+
+        button:hover {
+            transform: scale(1.1);
+        }
+
+        .controls {
+            margin-top: 20px;
+            font-size: 16px;
+            line-height: 1.6;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        #hud {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            display: flex;
+            justify-content: space-between;
+            color: white;
+            font-size: 20px;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas" width="1000" height="600"></canvas>
+
+        <div id="hud" class="hidden">
+            <div id="timer">Time: 120s</div>
+            <div id="distance">Distance: 0m</div>
+            <div id="speed">Speed: 1x</div>
+        </div>
+
+        <div id="startScreen">
+            <h1>Executive Race</h1>
+            <h2>Maturity Challenge</h2>
+            <p>Run to the finish line while avoiding workplace obstacles!</p>
+            <p>You have 2 minutes to achieve organizational maturity.</p>
+            <div class="controls">
+                <p><strong>Controls:</strong></p>
+                <p>↑ Arrow - Jump</p>
+                <p>↓ Arrow - Duck</p>
+                <p>← → Arrows - Move Left/Right</p>
+            </div>
+            <button onclick="startGame()">Start Race</button>
+        </div>
+
+        <div id="gameOverScreen" class="hidden">
+            <h1>Game Over!</h1>
+            <h2>You hit an obstacle!</h2>
+            <p id="finalStats"></p>
+            <button onclick="restartGame()">Try Again</button>
+        </div>
+
+        <div id="winScreen" class="hidden">
+            <h1>Congrats! Maturity Achieved!!</h1>
+            <h2>You reached the finish line!</h2>
+            <p id="winStats"></p>
+            <button onclick="restartGame()">Play Again</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Game state
+        let gameState = 'start'; // start, playing, gameOver, win
+        let gameTime = 0;
+        let maxTime = 120; // 2 minutes in seconds
+        let distance = 0;
+        let finishLine = 5000; // Distance to finish line in meters
+        let baseSpeed = 3;
+        let currentSpeed = baseSpeed;
+
+        // Player
+        const player = {
+            x: 100,
+            y: 400,
+            width: 50,
+            height: 80,
+            velocityY: 0,
+            jumping: false,
+            ducking: false,
+            lane: 1, // 0 = left, 1 = middle, 2 = right
+        };
+
+        const lanes = [250, 400, 550];
+        const gravity = 0.8;
+        const jumpPower = -15;
+
+        // Obstacles
+        const obstacles = [];
+        const obstacleTypes = [
+            { name: 'Files', color: '#4A90E2', width: 40, height: 60, canDuck: false },
+            { name: 'Expenses', color: '#E74C3C', width: 50, height: 50, canDuck: false },
+            { name: 'Bad Marketing', color: '#F39C12', width: 60, height: 70, canDuck: false },
+            { name: 'No Training', color: '#9B59B6', width: 45, height: 55, canDuck: false },
+            { name: 'No ICP', color: '#E67E22', width: 55, height: 45, canDuck: true },
+        ];
+
+        // Background elements
+        const officeItems = [];
+
+        // Input handling
+        const keys = {};
+
+        window.addEventListener('keydown', (e) => {
+            keys[e.key] = true;
+
+            if (gameState === 'playing') {
+                if (e.key === 'ArrowUp' && !player.jumping && !player.ducking) {
+                    player.velocityY = jumpPower;
+                    player.jumping = true;
+                }
+                if (e.key === 'ArrowDown' && !player.jumping) {
+                    player.ducking = true;
+                }
+                if (e.key === 'ArrowLeft') {
+                    if (player.lane > 0) player.lane--;
+                }
+                if (e.key === 'ArrowRight') {
+                    if (player.lane < 2) player.lane++;
+                }
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            keys[e.key] = false;
+            if (e.key === 'ArrowDown') {
+                player.ducking = false;
+            }
+        });
+
+        // Initialize office background
+        function initOfficeBackground() {
+            for (let i = 0; i < 20; i++) {
+                officeItems.push({
+                    x: Math.random() * canvas.width * 2,
+                    y: Math.random() * 200 + 50,
+                    type: Math.floor(Math.random() * 3), // desk, person, plant
+                    speed: Math.random() * 0.5 + 0.3
+                });
+            }
+        }
+
+        // Draw office background
+        function drawBackground() {
+            // Sky/ceiling
+            ctx.fillStyle = '#E8E8E8';
+            ctx.fillRect(0, 0, canvas.width, 300);
+
+            // Floor
+            ctx.fillStyle = '#8B8B8B';
+            ctx.fillRect(0, 300, canvas.width, 300);
+
+            // Floor tiles
+            ctx.strokeStyle = '#7A7A7A';
+            ctx.lineWidth = 2;
+            for (let i = 0; i < canvas.width; i += 100) {
+                ctx.beginPath();
+                ctx.moveTo(i - (distance * currentSpeed * 0.5) % 100, 300);
+                ctx.lineTo(i - (distance * currentSpeed * 0.5) % 100, canvas.height);
+                ctx.stroke();
+            }
+
+            // Office items
+            officeItems.forEach(item => {
+                item.x -= item.speed * currentSpeed;
+                if (item.x < -100) {
+                    item.x = canvas.width + Math.random() * 200;
+                }
+
+                ctx.save();
+                ctx.globalAlpha = 0.3;
+
+                if (item.type === 0) { // Desk
+                    ctx.fillStyle = '#8B4513';
+                    ctx.fillRect(item.x, item.y, 80, 40);
+                } else if (item.type === 1) { // Person
+                    // Head
+                    ctx.fillStyle = '#FFD1A3';
+                    ctx.beginPath();
+                    ctx.arc(item.x + 20, item.y + 15, 15, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Body
+                    ctx.fillStyle = '#4A4A4A';
+                    ctx.fillRect(item.x + 5, item.y + 30, 30, 40);
+                } else { // Plant
+                    ctx.fillStyle = '#228B22';
+                    ctx.beginPath();
+                    ctx.moveTo(item.x + 15, item.y);
+                    ctx.lineTo(item.x + 25, item.y + 30);
+                    ctx.lineTo(item.x + 5, item.y + 30);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.fillStyle = '#8B4513';
+                    ctx.fillRect(item.x + 10, item.y + 30, 10, 15);
+                }
+
+                ctx.restore();
+            });
+
+            // Lane markers
+            ctx.strokeStyle = '#FFD700';
+            ctx.lineWidth = 3;
+            ctx.setLineDash([20, 15]);
+            for (let lane of lanes) {
+                ctx.beginPath();
+                ctx.moveTo(0, lane - 40);
+                ctx.lineTo(canvas.width, lane - 40);
+                ctx.stroke();
+            }
+            ctx.setLineDash([]);
+        }
+
+        // Draw player
+        function drawPlayer() {
+            const targetY = lanes[player.lane];
+            player.x += (80 - player.x) * 0.1; // Smooth x position
+
+            // Apply gravity and jumping
+            if (player.jumping) {
+                player.velocityY += gravity;
+                player.y += player.velocityY;
+
+                if (player.y >= targetY) {
+                    player.y = targetY;
+                    player.jumping = false;
+                    player.velocityY = 0;
+                }
+            } else {
+                player.y += (targetY - player.y) * 0.2; // Smooth lane switching
+            }
+
+            // Draw player (executive character)
+            ctx.save();
+
+            // Shadow
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+            ctx.beginPath();
+            ctx.ellipse(player.x + 25, lanes[player.lane] + 80, 20, 5, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            let playerHeight = player.ducking ? player.height * 0.5 : player.height;
+            let playerY = player.ducking ? player.y + player.height * 0.5 : player.y;
+
+            // Legs (running animation)
+            const legOffset = Math.sin(Date.now() / 100) * 5;
+            ctx.fillStyle = '#2C3E50';
+            ctx.fillRect(player.x + 15, playerY + playerHeight - 30, 8, 30);
+            ctx.fillRect(player.x + 27, playerY + playerHeight - 30 + legOffset, 8, 30 - legOffset);
+
+            // Body
+            ctx.fillStyle = '#34495E';
+            if (player.ducking) {
+                ctx.fillRect(player.x + 10, playerY, 40, playerHeight);
+            } else {
+                ctx.fillRect(player.x + 10, playerY + 20, 30, playerHeight - 40);
+            }
+
+            // Head
+            ctx.fillStyle = '#FFD1A3';
+            ctx.beginPath();
+            ctx.arc(player.x + 25, playerY + 15, 12, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Tie
+            ctx.fillStyle = '#E74C3C';
+            ctx.fillRect(player.x + 22, playerY + 25, 6, 15);
+
+            // Arms (pumping animation)
+            const armOffset = Math.sin(Date.now() / 100) * 3;
+            ctx.strokeStyle = '#FFD1A3';
+            ctx.lineWidth = 6;
+            ctx.beginPath();
+            ctx.moveTo(player.x + 10, playerY + 30);
+            ctx.lineTo(player.x + 5, playerY + 45 + armOffset);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(player.x + 40, playerY + 30);
+            ctx.lineTo(player.x + 45, playerY + 45 - armOffset);
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
+        // Spawn obstacles
+        function spawnObstacle() {
+            if (Math.random() < 0.02 + (currentSpeed / 100)) {
+                const type = obstacleTypes[Math.floor(Math.random() * obstacleTypes.length)];
+                obstacles.push({
+                    x: canvas.width,
+                    lane: Math.floor(Math.random() * 3),
+                    type: type,
+                    passed: false
+                });
+            }
+        }
+
+        // Draw obstacles
+        function drawObstacles() {
+            obstacles.forEach((obstacle, index) => {
+                obstacle.x -= currentSpeed;
+
+                const y = lanes[obstacle.lane];
+
+                // Draw obstacle
+                ctx.fillStyle = obstacle.type.color;
+                ctx.fillRect(obstacle.x, y - obstacle.type.height + 40, obstacle.type.width, obstacle.type.height);
+
+                // Draw label
+                ctx.fillStyle = 'white';
+                ctx.font = '12px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(obstacle.type.name, obstacle.x + obstacle.type.width / 2, y - obstacle.type.height + 60);
+
+                // Check collision
+                if (checkCollision(player, obstacle)) {
+                    gameOver();
+                }
+
+                // Remove off-screen obstacles
+                if (obstacle.x < -obstacle.type.width) {
+                    obstacles.splice(index, 1);
+                }
+            });
+        }
+
+        // Collision detection
+        function checkCollision(player, obstacle) {
+            const playerHeight = player.ducking ? player.height * 0.5 : player.height;
+            const playerY = player.ducking ? player.y + player.height * 0.5 : player.y;
+
+            if (player.lane !== obstacle.lane) return false;
+
+            const playerLeft = player.x;
+            const playerRight = player.x + player.width;
+            const playerTop = playerY;
+            const playerBottom = playerY + playerHeight;
+
+            const obstacleLeft = obstacle.x;
+            const obstacleRight = obstacle.x + obstacle.type.width;
+            const obstacleTop = lanes[obstacle.lane] - obstacle.type.height + 40;
+            const obstacleBottom = lanes[obstacle.lane] + 40;
+
+            // If ducking and obstacle can be ducked under, allow it
+            if (player.ducking && obstacle.type.canDuck && obstacle.type.height < 50) {
+                return false;
+            }
+
+            // Check if player is jumping over obstacle
+            if (player.jumping && playerBottom < obstacleTop + 20) {
+                return false;
+            }
+
+            return playerRight > obstacleLeft &&
+                   playerLeft < obstacleRight &&
+                   playerBottom > obstacleTop &&
+                   playerTop < obstacleBottom;
+        }
+
+        // Draw finish line
+        function drawFinishLine() {
+            const finishX = canvas.width - (distance - finishLine + 500);
+
+            if (finishX > -100 && finishX < canvas.width + 100) {
+                // Checkered pattern
+                ctx.fillStyle = '#000';
+                ctx.fillRect(finishX, 0, 20, canvas.height);
+                ctx.fillStyle = '#FFF';
+                for (let i = 0; i < canvas.height; i += 40) {
+                    if (Math.floor(i / 40) % 2 === 0) {
+                        ctx.fillRect(finishX, i, 20, 20);
+                    } else {
+                        ctx.fillRect(finishX, i + 20, 20, 20);
+                    }
+                }
+
+                // Finish text
+                ctx.fillStyle = '#FFD700';
+                ctx.font = 'bold 30px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('FINISH', finishX + 10, 280);
+            }
+
+            // Check if player reached finish line
+            if (distance >= finishLine) {
+                winGame();
+            }
+        }
+
+        // Update HUD
+        function updateHUD() {
+            const timeRemaining = Math.max(0, maxTime - gameTime);
+            document.getElementById('timer').textContent = `Time: ${timeRemaining.toFixed(1)}s`;
+            document.getElementById('distance').textContent = `Distance: ${Math.floor(distance)}m / ${finishLine}m`;
+            document.getElementById('speed').textContent = `Speed: ${currentSpeed.toFixed(1)}x`;
+        }
+
+        // Game loop
+        function gameLoop(timestamp) {
+            if (gameState !== 'playing') return;
+
+            // Update game time
+            if (!gameLoop.lastTimestamp) gameLoop.lastTimestamp = timestamp;
+            const deltaTime = (timestamp - gameLoop.lastTimestamp) / 1000;
+            gameLoop.lastTimestamp = timestamp;
+
+            gameTime += deltaTime;
+
+            // Check time limit
+            if (gameTime >= maxTime) {
+                gameOver();
+                return;
+            }
+
+            // Increase speed over time
+            currentSpeed = baseSpeed + (gameTime / maxTime) * 5;
+
+            // Update distance
+            distance += currentSpeed;
+
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw everything
+            drawBackground();
+            drawFinishLine();
+            spawnObstacle();
+            drawObstacles();
+            drawPlayer();
+            updateHUD();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Start game
+        function startGame() {
+            gameState = 'playing';
+            gameTime = 0;
+            distance = 0;
+            currentSpeed = baseSpeed;
+            obstacles.length = 0;
+            player.y = lanes[1];
+            player.lane = 1;
+            player.jumping = false;
+            player.ducking = false;
+            player.velocityY = 0;
+
+            document.getElementById('startScreen').classList.add('hidden');
+            document.getElementById('gameOverScreen').classList.add('hidden');
+            document.getElementById('winScreen').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+
+            initOfficeBackground();
+            gameLoop.lastTimestamp = null;
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Game over
+        function gameOver() {
+            gameState = 'gameOver';
+            document.getElementById('finalStats').textContent =
+                `You traveled ${Math.floor(distance)}m in ${gameTime.toFixed(1)} seconds.`;
+            document.getElementById('gameOverScreen').classList.remove('hidden');
+            document.getElementById('hud').classList.add('hidden');
+        }
+
+        // Win game
+        function winGame() {
+            gameState = 'win';
+            document.getElementById('winStats').textContent =
+                `You achieved maturity in ${gameTime.toFixed(1)} seconds with a final speed of ${currentSpeed.toFixed(1)}x!`;
+            document.getElementById('winScreen').classList.remove('hidden');
+            document.getElementById('hud').classList.add('hidden');
+        }
+
+        // Restart game
+        function restartGame() {
+            startGame();
+        }
+
+        // Initialize
+        initOfficeBackground();
+    </script>
+</body>
+</html>
