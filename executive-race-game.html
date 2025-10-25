@@ -118,24 +118,14 @@
         </div>
 
         <div id="startScreen">
-            <h1>Executive Race</h1>
-            <h2>Maturity Challenge</h2>
-            <p>Run to the finish line while avoiding workplace obstacles!</p>
-            <p>You have 2 minutes to achieve organizational maturity.</p>
-            <div class="controls">
-                <p><strong>Controls:</strong></p>
-                <p>↑ Arrow - Jump</p>
-                <p>↓ Arrow - Duck</p>
-                <p>← → Arrows - Move Left/Right</p>
-            </div>
-            <button onclick="startGame()">Start Race</button>
+            <button onclick="startGame()">Start</button>
         </div>
 
         <div id="gameOverScreen" class="hidden">
             <h1>Game Over!</h1>
-            <h2>You hit an obstacle!</h2>
+            <h2 id="gameOverReason"></h2>
             <p id="finalStats"></p>
-            <button onclick="restartGame()">Try Again</button>
+            <button onclick="restartGame()">Play Again</button>
         </div>
 
         <div id="winScreen" class="hidden">
@@ -403,7 +393,7 @@
 
                 // Check collision
                 if (checkCollision(player, obstacle)) {
-                    gameOver();
+                    gameOver('collision');
                 }
 
                 // Remove off-screen obstacles
@@ -497,7 +487,7 @@
 
             // Check time limit
             if (gameTime >= maxTime) {
-                gameOver();
+                gameOver('timeout');
                 return;
             }
 
@@ -545,8 +535,15 @@
         }
 
         // Game over
-        function gameOver() {
+        function gameOver(reason) {
             gameState = 'gameOver';
+
+            if (reason === 'timeout') {
+                document.getElementById('gameOverReason').textContent = 'Time ran out!';
+            } else {
+                document.getElementById('gameOverReason').textContent = 'You hit an obstacle!';
+            }
+
             document.getElementById('finalStats').textContent =
                 `You traveled ${Math.floor(distance)}m in ${gameTime.toFixed(1)} seconds.`;
             document.getElementById('gameOverScreen').classList.remove('hidden');
