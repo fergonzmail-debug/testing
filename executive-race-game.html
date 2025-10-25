@@ -30,7 +30,7 @@
 
         canvas {
             display: block;
-            background: #f0f0f0;
+            background: #000000;
         }
 
         #startScreen, #gameOverScreen, #winScreen {
@@ -43,10 +43,11 @@
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            background: rgba(0, 0, 0, 0.8);
+            background: #000000;
             color: white;
             text-align: center;
             padding: 20px;
+            z-index: 10;
         }
 
         h1 {
@@ -210,6 +211,7 @@
 
         // Initialize office background
         function initOfficeBackground() {
+            officeItems.length = 0; // Clear existing items
             for (let i = 0; i < 20; i++) {
                 officeItems.push({
                     x: Math.random() * canvas.width * 2,
@@ -563,9 +565,6 @@
         function restartGame() {
             startGame();
         }
-
-        // Initialize
-        initOfficeBackground();
     </script>
 </body>
 </html>
